@@ -377,13 +377,19 @@ void ZygiskContext::app_specialize_pre() {
         flags |= DO_REVERT_UNMOUNT;
     }
 
-    // Treat the WebView app-zygote as if it were on the denylist so that the isolated
-    // processes it forks share the same clean mount namespace as every other isolated
-    // process. The app-zygote's sandboxed children inherit its namespace directly, so
-    // routing it down the revert-unmount path is what keeps the mount view uniform
-    // across all isolated processes.
-    if (process != nullptr && strcmp(process, "webview_zygote") == 0) {
-        flags |= DO_REVERT_UNMOUNT;
+    // App zygotes are sandbox carriers whose isolated children inherit their mount
+    // namespace directly.  Android uses both the shared "webview_zygote" name and
+    // package-specific names ending in "_zygote".  None of them should retain root
+    // mounts: a same-UID child can otherwise inspect the carrier's mountinfo during
+    // specialization even when the final child namespace is clean.
+    if (process != nullptr) {
+        constexpr const char *app_zygote_suffix = "_zygote";
+        const size_t process_len = strlen(process);
+        const size_t suffix_len = strlen(app_zygote_suffix);
+        if (process_len >= suffix_len &&
+            strcmp(process + process_len - suffix_len, app_zygote_suffix) == 0) {
+            flags |= DO_REVERT_UNMOUNT;
+        }
     }
 
     flags |= APP_SPECIALIZE;
