@@ -265,7 +265,6 @@ struct ZygiskContext {
     pid_t pid;
     uint32_t flags;
     uint32_t info_flags;
-    bool entered_clean_namespace = false;
     std::vector<bool> allowed_fds;
     std::vector<int> exempted_fds;
 

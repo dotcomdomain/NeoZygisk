@@ -395,16 +395,6 @@ void ZygiskContext::app_specialize_pre() {
     flags |= APP_SPECIALIZE;
     if (!skip_zygiskd) run_modules_pre();
 
-    // Enter the clean namespace before Android drops the child to the app UID.
-    // Waiting for the later unshare(CLONE_NEWNS) hook leaves a short interval in
-    // which another process with the same UID can read this child's inherited,
-    // root-visible /proc/<pid>/mountinfo.  Keep the unshare hook as a fallback
-    // and refresh, but close that cross-process observation window here.
-    bool should_unmount = !(info_flags & (PROCESS_IS_MANAGER | PROCESS_GRANTED_ROOT)) &&
-                          (flags & DO_REVERT_UNMOUNT);
-    if (should_unmount && !skip_zygiskd) {
-        entered_clean_namespace = update_mount_namespace(zygiskd::MountNamespace::Clean);
-    }
 }
 
 void ZygiskContext::app_specialize_post() {
