@@ -369,6 +369,14 @@ void ZygiskContext::app_specialize_pre() {
         flags |= DO_REVERT_UNMOUNT;
     }
 
+    // Isolated UIDs are recycled and are not reliable denylist keys.  app_data_dir
+    // normally lets us recover the owner UID above, but Android can omit it for
+    // app-zygote and one-shot isolated services.  Give every isolated child the
+    // root-free namespace; no isolated application process should need root mounts.
+    if (is_isolated_aid) {
+        flags |= DO_REVERT_UNMOUNT;
+    }
+
     // Treat the WebView app-zygote as if it were on the denylist so that the isolated
     // processes it forks share the same clean mount namespace as every other isolated
     // process. The app-zygote's sandboxed children inherit its namespace directly, so

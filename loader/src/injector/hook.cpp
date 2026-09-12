@@ -110,8 +110,11 @@ DCL_HOOK_FUNC(static int, unshare, int flags) {
         if (!should_unmount && g_hook->zygote_unmounted) {
             ZygiskContext::update_mount_namespace(zygiskd::MountNamespace::Root);
         }
-        bool is_zygote_clean = g_hook->zygote_unmounted && g_hook->zygote_traces.size() == 0;
-        if (should_unmount && !is_zygote_clean) {
+        // Always enter the cached clean namespace for an unmounted process.  A clean
+        // zygote is only a snapshot of the parent at injection time; root or module
+        // mounts can still change afterwards, and isolated services are especially
+        // likely to be forked after that snapshot has gone stale.
+        if (should_unmount) {
             ZygiskContext::update_mount_namespace(zygiskd::MountNamespace::Clean);
         }
     }
