@@ -112,9 +112,6 @@ impl MountNamespaceManager {
                     Self::make_mounts_private();
                     // Unmount all root and module mounts.
                     Self::clean_mount_namespace().unwrap();
-                    // Do not let an app use a readable /proc/<pid>/mountinfo from a
-                    // different UID to reconstruct the root namespace we just hid.
-                    Self::restrict_proc_visibility();
                 }
 
                 // Signal to the parent that setup is complete.
@@ -232,29 +229,6 @@ impl MountNamespaceManager {
         }
     }
 
-    /// Layers a procfs without Android's readproc-group exemption over `/proc` in the
-    /// clean namespace.  Apps retain their own `/proc/self` data, while an isolated
-    /// helper cannot inspect a root daemon's mount table through `/proc/<pid>`.
-    fn restrict_proc_visibility() {
-        let proc = c"proc";
-        let target = c"/proc";
-        let options = c"hidepid=2,gid=0";
-        let result = unsafe {
-            libc::mount(
-                proc.as_ptr(),
-                target.as_ptr(),
-                proc.as_ptr(),
-                libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC,
-                options.as_ptr().cast(),
-            )
-        };
-        if result == -1 {
-            error!(
-                "Failed to restrict procfs visibility in the clean namespace: {}",
-                Error::last_os_error()
-            );
-        }
-    }
 }
 
 impl Default for MountNamespaceManager {
