@@ -110,11 +110,15 @@ DCL_HOOK_FUNC(static int, unshare, int flags) {
         if (!should_unmount && g_hook->zygote_unmounted) {
             ZygiskContext::update_mount_namespace(zygiskd::MountNamespace::Root);
         }
-        // Always enter the cached clean namespace for an unmounted process.  A clean
-        // zygote is only a snapshot of the parent at injection time; root or module
-        // mounts can still change afterwards, and isolated services are especially
-        // likely to be forked after that snapshot has gone stale.
-        if (should_unmount) {
+        // app_specialize_pre() may already have moved this child into the cached
+        // clean namespace before privilege drop. Android mounts the child's scoped
+        // /storage view after that point. Re-entering the old cached namespace here
+        // discards those legitimate storage mounts and leaves /storage as bare
+        // tmpfs, which breaks apps that use Environment or StatFs (including Play
+        // Store's install-space preflight). Only switch here when the zygote itself
+        // was not already cleaned for this child; otherwise keep its post-specialization
+        // mounts intact.
+        if (should_unmount && !g_ctx->entered_clean_namespace) {
             ZygiskContext::update_mount_namespace(zygiskd::MountNamespace::Clean);
         }
     }

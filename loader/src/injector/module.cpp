@@ -403,7 +403,7 @@ void ZygiskContext::app_specialize_pre() {
     bool should_unmount = !(info_flags & (PROCESS_IS_MANAGER | PROCESS_GRANTED_ROOT)) &&
                           (flags & DO_REVERT_UNMOUNT);
     if (should_unmount && !skip_zygiskd) {
-        update_mount_namespace(zygiskd::MountNamespace::Clean);
+        entered_clean_namespace = update_mount_namespace(zygiskd::MountNamespace::Clean);
     }
 }
 
