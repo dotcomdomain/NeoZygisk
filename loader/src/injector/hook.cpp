@@ -104,22 +104,42 @@ DCL_HOOK_FUNC(int, fork) { return (g_ctx && g_ctx->pid >= 0) ? g_ctx->pid : old_
 
 // Unmount stuffs in the process's private mount namespace
 DCL_HOOK_FUNC(static int, unshare, int flags) {
+    bool clean_live_namespace = false;
     if (g_ctx && (flags & CLONE_NEWNS) && !(g_ctx->flags & SERVER_FORK_AND_SPECIALIZE)) {
         bool should_unmount = !(g_ctx->info_flags & (PROCESS_IS_MANAGER | PROCESS_GRANTED_ROOT)) &&
                               g_ctx->flags & DO_REVERT_UNMOUNT;
         if (!should_unmount && g_hook->zygote_unmounted) {
             ZygiskContext::update_mount_namespace(zygiskd::MountNamespace::Root);
         }
-        // A clean zygote already gives the child a root-free base namespace. Avoid
-        // replacing it with the cached snapshot: Android has added the app's scoped
-        // storage mounts by the time this hook runs, and setns() would discard them.
+        // A clean zygote already gives the child a root-free base namespace. If the
+        // zygote could not be cleaned globally (for example because a module mounts
+        // under /product), clean the child's newly unshared live namespace below.
+        // Entering the boot-time cached namespace would discard Android's later
+        // /mnt and scoped-storage topology.
         bool is_zygote_clean = g_hook->zygote_unmounted && g_hook->zygote_traces.size() == 0;
         if (should_unmount && !is_zygote_clean) {
-            ZygiskContext::update_mount_namespace(zygiskd::MountNamespace::Clean);
+            clean_live_namespace = true;
         }
     }
 
     int res = old_unshare(flags);
+    if (res == 0 && clean_live_namespace) {
+        // Prevent detach operations from propagating back into Zygote's namespace.
+        if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) == -1) {
+            LOGE("failed to make app mount namespace private: %s", strerror(errno));
+        }
+
+        // Derive the clean view from the live app namespace so Android's current
+        // storage mounts survive. check_zygote_traces() identifies only root/module
+        // mounts and returns them deepest/newest first.
+        auto traces = check_zygote_traces(g_ctx->info_flags);
+        for (const auto &trace : traces) {
+            if (umount2(trace.target.c_str(), MNT_DETACH) == -1) {
+                LOGE("failed to unmount %s from app namespace: %s", trace.target.c_str(),
+                     strerror(errno));
+            }
+        }
+    }
     errno = 0;  // Restore errno back to 0
     return res;
 }
